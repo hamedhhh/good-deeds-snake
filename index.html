@@ -1,0 +1,267 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Good Deeds Snake</title>
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #fff8e7;
+    --card: #ffffff;
+    --ink: #3b2f2f;
+    --muted: #8a7a6a;
+    --body: #cdeac0;
+    --body-edge: #8cc47a;
+    --empty: #f4f1ea;
+    --empty-edge: #c9bfae;
+    --accent: #ff7a59;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "Baloo 2", system-ui, sans-serif;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 16px;
+  }
+  h1 {
+    margin: 4px 0 0;
+    font-size: clamp(1.6rem, 5vw, 2.6rem);
+    font-weight: 800;
+    text-align: center;
+    outline: none;
+    border-radius: 12px;
+    padding: 0 10px;
+  }
+  h1:focus { background: #fff; box-shadow: 0 0 0 3px #ffd36e; }
+  .hint { color: var(--muted); margin: 0 0 8px; text-align: center; font-size: 1.05rem; }
+  .card {
+    background: var(--card);
+    border-radius: 28px;
+    box-shadow: 0 8px 0 #f0e2c4, 0 12px 30px rgba(120, 90, 40, .12);
+    padding: 12px;
+    width: 100%;
+    max-width: 900px;
+  }
+  svg { width: 100%; height: auto; display: block; touch-action: manipulation; }
+  .seg { cursor: pointer; transition: transform .25s cubic-bezier(.3,1.6,.5,1); transform-box: fill-box; transform-origin: center; }
+  .seg:hover { transform: scale(1.08); }
+  .seg.pop { animation: pop .4s cubic-bezier(.3,1.6,.5,1); }
+  .seg.shrink { animation: shrink .35s ease; }
+  @keyframes pop { 0% { transform: scale(.6); } 100% { transform: scale(1); } }
+  @keyframes shrink { 0% { transform: scale(1.15); } 50% { transform: scale(.85); } 100% { transform: scale(1); } }
+  .seg text { pointer-events: none; font-family: "Baloo 2", sans-serif; font-weight: 700; user-select: none; }
+  .score {
+    display: flex; align-items: center; justify-content: center; gap: 12px;
+    font-size: clamp(1.3rem, 4vw, 1.8rem); font-weight: 800; margin: 12px 0 4px;
+  }
+  .bar { width: min(420px, 80vw); height: 18px; background: #f1e8d6; border-radius: 99px; overflow: hidden; }
+  .bar > div { height: 100%; width: 0; border-radius: 99px;
+    background: linear-gradient(90deg, #ff6b6b, #ffb84d, #ffe66d, #7ed957, #4dc3ff, #a97cff);
+    transition: width .4s ease; }
+  .controls { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-top: 14px; }
+  button, select {
+    font-family: inherit; font-size: 1rem; font-weight: 700;
+    border: none; border-radius: 99px; padding: 8px 18px; cursor: pointer;
+    background: #ffe9b8; color: var(--ink); box-shadow: 0 4px 0 #f0cf86;
+  }
+  button:active { transform: translateY(2px); box-shadow: 0 2px 0 #f0cf86; }
+  .legend { display: flex; gap: 18px; justify-content: center; flex-wrap: wrap; color: var(--muted); margin-top: 10px; font-size: 1rem; }
+  .party {
+    position: fixed; inset: 0; display: none; align-items: center; justify-content: center;
+    background: rgba(255, 248, 231, .75); z-index: 5; flex-direction: column; text-align: center; padding: 16px;
+  }
+  .party.show { display: flex; }
+  .party h2 { font-size: clamp(2rem, 8vw, 4rem); margin: 0; color: var(--accent); }
+  .party p { font-size: 1.4rem; margin: 6px 0 16px; }
+  .confetti { position: fixed; top: -20px; width: 12px; height: 16px; border-radius: 3px; z-index: 6; pointer-events: none;
+    animation: fall linear forwards; }
+  @keyframes fall { to { transform: translateY(110vh) rotate(720deg); } }
+</style>
+</head>
+<body>
+  <h1 id="title" contenteditable="true" spellcheck="false">My Good Deeds Snake</h1>
+  <p class="hint">Tap a piece to color it for a good deed. Tap a colored piece to take the color away.</p>
+
+  <div class="card">
+    <svg id="snake" viewBox="0 0 800 540" aria-label="Snake with colorable parts"></svg>
+  </div>
+
+  <div class="score">
+    <span id="count">0 / 30</span>
+    <div class="bar"><div id="fill"></div></div>
+  </div>
+
+  <div class="controls">
+    <label>Days:
+      <select id="days">
+        <option>28</option><option>29</option><option selected>30</option><option>31</option>
+      </select>
+    </label>
+    <button id="sound">🔊 Sound on</button>
+    <button id="reset">🧽 Start a new month</button>
+  </div>
+  <div class="legend"><span>🌈 Good deed = add a color</span><span>⚪ Not so good = lose a color</span></div>
+
+  <div class="party" id="party">
+    <h2>🎉 Hooray! 🎉</h2>
+    <p>The whole snake is full of colors!</p>
+    <button id="closeParty">Yay!</button>
+  </div>
+
+<script>
+const NS = "http://www.w3.org/2000/svg";
+const svg = document.getElementById("snake");
+const KEY = "goodDeedsSnake.v1";
+
+let state = { days: 30, filled: [], title: "My Good Deeds Snake", sound: true };
+try {
+  const saved = JSON.parse(localStorage.getItem(KEY));
+  if (saved && Array.isArray(saved.filled)) state = Object.assign(state, saved);
+} catch (e) {}
+
+function save() { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {} }
+
+function el(name, attrs, parent) {
+  const n = document.createElementNS(NS, name);
+  for (const k in attrs) n.setAttribute(k, attrs[k]);
+  if (parent) parent.appendChild(n);
+  return n;
+}
+
+// Winding path the snake follows (tail top-left, head bottom-right)
+const PATH = "M 90 95 H 690 A 90 90 0 0 1 690 275 H 110 A 90 90 0 0 0 110 455 H 700";
+
+function colorFor(i, n) { return `hsl(${Math.round(i * 330 / n)}, 85%, 62%)`; }
+function edgeFor(i, n)  { return `hsl(${Math.round(i * 330 / n)}, 70%, 42%)`; }
+
+function draw() {
+  svg.innerHTML = "";
+  const n = state.days;
+  const guide = el("path", { d: PATH, fill: "none" }, svg);
+  const len = guide.getTotalLength();
+
+  // body
+  el("path", { d: PATH, fill: "none", stroke: "var(--body-edge)", "stroke-width": 78, "stroke-linecap": "round" }, svg);
+  el("path", { d: PATH, fill: "none", stroke: "var(--body)", "stroke-width": 68, "stroke-linecap": "round" }, svg);
+
+  // tail tip
+  const t0 = guide.getPointAtLength(0);
+  el("path", { d: `M ${t0.x} ${t0.y - 30} Q ${t0.x - 70} ${t0.y - 10} ${t0.x - 60} ${t0.y + 30} Q ${t0.x - 30} ${t0.y + 5} ${t0.x} ${t0.y + 30} Z`,
+               fill: "var(--body)", stroke: "var(--body-edge)", "stroke-width": 5, "stroke-linejoin": "round" }, svg);
+
+  // segments
+  const start = 22, end = len - 40;
+  const step = (end - start) / (n - 1);
+  const r = Math.min(30, step * 0.46);
+  for (let i = 0; i < n; i++) {
+    const p = guide.getPointAtLength(start + i * step);
+    const on = !!state.filled[i];
+    const g = el("g", { class: "seg", tabindex: 0, role: "button", "data-i": i,
+                        "aria-label": `Day ${i + 1}${on ? ", colored" : ""}` }, svg);
+    el("circle", { cx: p.x, cy: p.y, r,
+                   fill: on ? colorFor(i, n) : "var(--empty)",
+                   stroke: on ? edgeFor(i, n) : "var(--empty-edge)",
+                   "stroke-width": 4, "stroke-dasharray": on ? "none" : "6 5" }, g);
+    if (on) el("circle", { cx: p.x - r * 0.35, cy: p.y - r * 0.4, r: r * 0.22, fill: "rgba(255,255,255,.55)" }, g);
+    const tx = el("text", { x: p.x, y: p.y + 8, "text-anchor": "middle", "font-size": 22,
+                            fill: on ? "#fff" : "#b3a690" }, g);
+    tx.textContent = on ? "★" : (i + 1);
+    if (on) { tx.setAttribute("font-size", 28); tx.setAttribute("y", p.y + 10); }
+    g.addEventListener("click", () => toggle(i));
+    g.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(i); } });
+  }
+
+  // head
+  const h = guide.getPointAtLength(len);
+  const hx = h.x + 18, hy = h.y;
+  el("path", { d: `M ${hx + 50} ${hy} l 26 -4 l -8 4 l 8 4 z`, fill: "#ff5a6e" }, svg); // tongue
+  el("ellipse", { cx: hx, cy: hy, rx: 58, ry: 46, fill: "#a6dc8f", stroke: "var(--body-edge)", "stroke-width": 5 }, svg);
+  el("circle", { cx: hx - 26, cy: hy + 16, r: 7, fill: "#ffb3b3", opacity: .8 }, svg); // cheek
+  for (const dy of [-18, 18]) {
+    el("circle", { cx: hx + 14, cy: hy + dy - 4, r: 13, fill: "#fff", stroke: "#3b2f2f", "stroke-width": 2 }, svg);
+    el("circle", { cx: hx + 18, cy: hy + dy - 4, r: 6, fill: "#3b2f2f" }, svg);
+    el("circle", { cx: hx + 20, cy: hy + dy - 7, r: 2, fill: "#fff" }, svg);
+  }
+  const count = state.filled.filter(Boolean).length;
+  const happy = count >= n / 2;
+  el("path", { d: happy ? `M ${hx + 30} ${hy - 8} Q ${hx + 46} ${hy} ${hx + 30} ${hy + 8}`
+                        : `M ${hx + 38} ${hy - 7} L ${hx + 38} ${hy + 7}`,
+               fill: "none", stroke: "#3b2f2f", "stroke-width": 3, "stroke-linecap": "round" }, svg);
+
+  document.getElementById("count").textContent = `${count} / ${n}`;
+  document.getElementById("fill").style.width = (count / n * 100) + "%";
+}
+
+function toggle(i) {
+  state.filled[i] = !state.filled[i];
+  save();
+  draw();
+  const g = svg.querySelector(`.seg[data-i="${i}"]`);
+  g.classList.add(state.filled[i] ? "pop" : "shrink");
+  g.focus({ preventScroll: true });
+  beep(state.filled[i]);
+  const n = state.days;
+  if (state.filled[i] && state.filled.slice(0, n).filter(Boolean).length === n) celebrate();
+}
+
+let actx;
+function beep(up) {
+  if (!state.sound) return;
+  try {
+    actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+    const o = actx.createOscillator(), g = actx.createGain();
+    o.type = "triangle";
+    const t = actx.currentTime;
+    o.frequency.setValueAtTime(up ? 523 : 392, t);
+    o.frequency.exponentialRampToValueAtTime(up ? 1047 : 196, t + 0.2);
+    g.gain.setValueAtTime(0.2, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.3);
+    o.connect(g).connect(actx.destination);
+    o.start(t); o.stop(t + 0.3);
+  } catch (e) {}
+}
+
+function celebrate() {
+  document.getElementById("party").classList.add("show");
+  for (let k = 0; k < 120; k++) {
+    const c = document.createElement("div");
+    c.className = "confetti";
+    c.style.left = Math.random() * 100 + "vw";
+    c.style.background = `hsl(${Math.random() * 360}, 90%, 60%)`;
+    c.style.animationDuration = (2 + Math.random() * 2.5) + "s";
+    c.style.animationDelay = (Math.random() * 0.8) + "s";
+    document.body.appendChild(c);
+    setTimeout(() => c.remove(), 5500);
+  }
+}
+
+// controls
+const title = document.getElementById("title");
+title.textContent = state.title;
+title.addEventListener("input", () => { state.title = title.textContent.trim() || "My Good Deeds Snake"; save(); });
+title.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); title.blur(); } });
+
+const days = document.getElementById("days");
+days.value = String(state.days);
+days.addEventListener("change", () => { state.days = +days.value; state.filled = state.filled.slice(0, state.days); save(); draw(); });
+
+const soundBtn = document.getElementById("sound");
+function soundLabel() { soundBtn.textContent = state.sound ? "🔊 Sound on" : "🔇 Sound off"; }
+soundLabel();
+soundBtn.addEventListener("click", () => { state.sound = !state.sound; save(); soundLabel(); });
+
+document.getElementById("reset").addEventListener("click", () => {
+  if (confirm("Start a new month? All colors will be cleared.")) { state.filled = []; save(); draw(); }
+});
+document.getElementById("closeParty").addEventListener("click", () => document.getElementById("party").classList.remove("show"));
+
+draw();
+</script>
+</body>
+</html>
